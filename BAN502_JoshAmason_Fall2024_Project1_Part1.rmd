@@ -1,0 +1,225 @@
+---
+output:
+  word_document: default
+  html_document: default
+---
+```{r}
+library(readr)
+train <- read_csv("train.csv")
+test <- read_csv("test.csv")
+```
+
+```{r}
+library(tidyverse)
+library(tidymodels)
+library(ggplot2)
+library(lubridate)
+library(e1071) 
+library(ROCR)
+library(GGally)
+library(glmnet)
+library(lmtest)
+library(ggcorrplot)
+library(gridExtra)
+library(dplyr)
+library(jtools)
+```
+
+```{r}
+summary(train)
+```
+
+```{r}
+ggplot(train, aes(x=product_code, y=loading, fill=product_code))+geom_boxplot()+theme_bw()
+```
+```{r}
+New_train <- na.omit(train)
+summary(New_train)
+```
+```{r}
+numb1 <- ggplot(New_train, aes(x=failure, fill=product_code))+geom_bar()+theme_bw()
+numb2 <- ggplot(New_train, aes(x=product_code, fill=failure))+geom_bar()+theme_bw()
+grid.arrange(numb1, numb2)
+
+
+```
+```{r}
+FailNo <- New_train %>% filter( , failure=="No")
+FailYes <- New_train %>% filter( , failure =="Yes")    
+
+summary(FailNo)
+summary(FailYes)
+```
+
+```{r}
+count(FailNo, product_code) 
+count(FailYes, product_code)
+
+New_train %>% count(failure,product_code)
+```
+
+```{r}
+ggplot(New_train, aes(x=failure, y=loading, fill=product_code))+geom_boxplot()+theme_bw()
+ggplot(New_train, aes(x=failure, y=loading, ))+geom_boxplot()+theme_bw()+stat_summary(fun.data = New_train, geom = "text", hjust = 0.5)
+```
+
+
+```{r}
+boxplot1 <- ggplot(New_train, aes(x=failure, y=loading, fill=product_code))+geom_boxplot(outlier.shape = NA)+theme_bw()+coord_cartesian(ylim = c(0, 250))
+boxplot1
+
+boxplot2 <- ggplot(New_train, aes(x=failure, y=loading))+geom_boxplot(outlier.shape = NA)+theme_bw()+coord_cartesian(ylim = c(0, 250))
+boxplot2
+```
+
+
+```{r}
+grid.arrange(boxplot1, boxplot2, ncol=2)
+```
+
+
+```{r}
+FailNoSelect <- select(FailNo, id, loading, )
+summary(FailNoSelect)
+FailYesSelect <- select(FailYes, id, loading, )
+summary(FailYesSelect)
+```
+
+
+```{r}
+t.test(FailNo$loading,FailYes$loading)
+```
+
+```{r}
+ggplot(FailNo, aes(x=product_code, y=loading, fill=product_code))+geom_boxplot(outlier.shape = NA)+coord_cartesian(ylim = c(0, 250))
+ggplot(FailYes, aes(x=product_code, y=loading, fill=product_code))+geom_boxplot(outlier.shape = NA)+coord_cartesian(ylim = c(0, 250))
+```
+
+
+```{r}
+train2 <- mutate(New_train, measure=(measurement_0+measurement_1+measurement_2+measurement_3+measurement_4+measurement_5+measurement_6+measurement_7+measurement_8+measurement_9+measurement_10+measurement_11+measurement_12+measurement_13+measurement_14+measurement_15+measurement_16+measurement_17))
+train2 <- train2 %>% select(id, product_code, loading, measure, failure)
+train2
+```
+```{r}
+ggplot(train2, aes(x=product_code, y=measure, fill=loading))+geom_boxplot()+theme_bw()
+ggplot(train2, aes(x=product_code, y=measure, fill=loading))+geom_boxplot(outlier.shape = NA)+theme_bw()
+
+msre.ldng <- ggplot(train2, aes(x=measure, y=loading))+geom_point()+geom_smooth(method = "lm")
+msre.ldng
+correlation <- cor(train2$measure, train2$loading, method=c("pearson"))
+correlation
+
+lm1 = lm(measure ~ loading, train2) 
+summary(lm1)
+```
+```{r}
+histo1 <- ggplot(train2, aes(x=measure, fill=product_code))+geom_histogram()
+histo2 <- ggplot(train2, aes(x=loading, fill=product_code))+geom_histogram()
+
+grid.arrange(histo1, histo2)
+```
+```{r}
+histo3 <- ggplot(train2, aes(x=measure, fill=failure))+geom_histogram()
+histo4 <- ggplot(train2, aes(x=loading, fill=failure))+geom_histogram()
+
+grid.arrange(histo3, histo4)
+```
+
+
+```{r}
+mostsimpletrain <- select(train2, -id, )
+
+ggcorr(mostsimpletrain, label=TRUE)
+```
+
+```{r}
+ggplot(train2, aes(x=failure, y=measure ))+geom_boxplot()
+ggplot(train2, aes(x=failure, y=measure, fill=failure))+geom_boxplot(outlier.shape = NA)+coord_cartesian(ylim = c(600, 1300))+theme_bw()
+
+```
+```{r}
+FailNo1 <- train2 %>% filter( , failure=="No")
+FailYes1 <- train2 %>% filter( , failure =="Yes")    
+
+summary(FailNo1)
+summary(FailYes1)
+
+t.test(FailNo1$measure,FailYes1$measure)
+```
+
+```{r}
+ggpairs(train2)
+
+train3 <- select(train2, product_code, loading, measure, failure)
+ggpairs(train3)
+```
+
+```{r}
+lm_model = linear_reg() %>% set_engine("lm")
+
+recipe = recipe(loading ~ ., train3)
+
+work_flow =workflow() %>% 
+  add_model(lm_model) %>%  
+  add_recipe(recipe) 
+
+lm_fit = fit(work_flow, train3)
+
+summary(lm_fit$fit$fit$fit)
+```
+```{r}
+finaltrain = New_train %>% mutate(failure = as_factor(failure)) %>% 
+  mutate(failure = fct_recode(failure, "No" = "0", "Yes" = "1" )) 
+
+model2 = 
+  logistic_reg(mode = "classification") %>% 
+  set_engine("glm") 
+
+recipe2 = recipe(failure ~ ., finaltrain)
+
+logreg = workflow() %>%
+  add_recipe(recipe2) %>% 
+  add_model(model2)
+
+fit2 = fit(logreg, finaltrain)
+```
+
+```{r}
+summary(fit2$fit$fit$fit)
+```
+```{r}
+finaltrain2 <- select(finaltrain, loading, product_code, id, measurement_4, measurement_17,)
+summary(finaltrain2)
+bp4 <- ggplot(finaltrain, aes(x=failure, y=measurement_4, fill=product_code))+geom_boxplot(outlier.shape = NA)+theme_bw()+coord_cartesian(ylim = c(9, 15))
+bp4
+```
+```{r}
+bp17 <- ggplot(finaltrain, aes(x=failure, y=measurement_17, fill=product_code))+
+  geom_boxplot(outlier.shape = NA)+
+  theme_bw()+
+  coord_cartesian(ylim = c(300, 1100))
+bp17
+```
+```{r}
+grid.arrange(bp4,bp17)
+```
+```{r}
+bp40 <- ggplot(finaltrain, aes(x=failure, y=measurement_4, fill=failure))+
+  geom_boxplot(outlier.shape = NA)+
+  theme_bw()+
+  coord_cartesian(ylim = c(9, 15))
+
+bp170 <- ggplot(finaltrain, aes(x=failure, y=measurement_17, fill=failure))+
+  geom_boxplot(outlier.shape = NA)+
+  theme_bw()+
+  coord_cartesian(ylim = c(300, 1100))
+
+grid.arrange(bp40,bp170)
+```
+```{r}
+t.test(FailNo$measurement_4,FailYes$measurement_4)
+t.test(FailNo$measurement_17,FailYes$measurement_17)
+```
+
+
